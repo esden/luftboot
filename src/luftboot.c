@@ -33,7 +33,7 @@
 #endif
 
 #ifndef BOARD_STR
-#define BOARD_STR       "USBRF"
+#define BOARD_STR       "Superbit USBRF"
 #endif
 
 #ifndef VERSION_STR
