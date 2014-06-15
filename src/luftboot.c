@@ -28,12 +28,28 @@
 #include <libopencm3/usb/usbd.h>
 #include <libopencm3/usb/dfu.h>
 
-#ifndef VERSION
-#define VERSION         ""
+#ifndef COMPANY_STR
+#define COMPANY_STR     "1 BIT SQUARED"
+#endif
+
+#ifndef BOARD_STR
+#define BOARD_STR       "USBRF"
+#endif
+
+#ifndef VERSION_STR
+#define VERSION_STR     ""
 #endif
 
 #ifndef DEV_SERIAL
 #define DEV_SERIAL      "NSERIAL"
+#endif
+
+#ifndef ID_VENDOR
+#define ID_VENDOR 0x1D50
+#endif
+
+#ifndef ID_PRODUCT
+#define ID_PRODUCT 0x60a6
 #endif
 
 #define APP_ADDRESS	0x08002000
@@ -77,8 +93,8 @@ const struct usb_device_descriptor dev = {
 	.bDeviceSubClass = 0,
 	.bDeviceProtocol = 0,
 	.bMaxPacketSize0 = 64,
-	.idVendor = 0x1D50,
-	.idProduct = 0x600F,
+	.idVendor = ID_VENDOR,
+	.idProduct = ID_PRODUCT,
 	.bcdDevice = 0x0100,
 	.iManufacturer = 1,
 	.iProduct = 2,
@@ -131,11 +147,11 @@ const struct usb_config_descriptor config = {
 	.interface = ifaces,
 };
 
-static char serial_no[24+8];
+static char serial_no[8+24+1];
 
 static const char *usb_strings[] = {
-	"Transition Robotics Inc.",
-	"Lisa/M (Upgrade) " VERSION,
+	COMPANY_STR,
+	BOARD_STR " (Upgrade) " VERSION,
 	serial_no,
 	/* This string is used by ST Microelectronics' DfuSe utility */
 	"@Internal Flash   /0x08000000/4*002Ka,124*002Kg"
@@ -182,6 +198,7 @@ static void usbdfu_getstatus_complete(usbd_device *device,
 				prog.addr = *(uint32_t*)(prog.buf+1);
 			}
 		} else {
+			gpio_toggle(GPIOB, GPIO2);
 			uint32_t baseaddr = prog.addr +
 				((prog.blocknum - 2) *
 					dfu_function.wTransferSize);
@@ -204,7 +221,7 @@ static void usbdfu_getstatus_complete(usbd_device *device,
 		  FLASH_CR = 0;
 		  flash_erase_option_bytes();
 		  flash_program_option_bytes(FLASH_OBP_RDP, 0x5AA5);
-		  flash_program_option_bytes(FLASH_OBP_WRP10, 0x03FC);
+		  //flash_program_option_bytes(FLASH_OBP_WRP10, 0x03FC);
 		  flash_program_option_bytes(FLASH_OBP_DATA0, 0xFF00);
 		  flash_lock();
 		}
@@ -279,32 +296,36 @@ static int usbdfu_control_request(usbd_device *device,
 
 static inline void gpio_init(void)
 {
-	/* Enable GPIOA, GPIOB, GPIOC, and AFIO clocks. */
-	rcc_peripheral_enable_clock(&RCC_APB2ENR, RCC_APB2ENR_IOPAEN |
-						  RCC_APB2ENR_IOPBEN |
-						  RCC_APB2ENR_IOPCEN |
-						  RCC_APB2ENR_AFIOEN);
+	/* Enable GPIOA, GPIOB and AFIO clocks. */
+	rcc_periph_clock_enable(RCC_AFIO);
+	rcc_periph_clock_enable(RCC_GPIOA);
+	rcc_periph_clock_enable(RCC_GPIOB);
+
+	/* USB_DETACH */
+	/* Set GPIO9 (In GPIO port A) to 'floating input'. */
+    gpio_clear(GPIOA, GPIO9);
+    gpio_set_mode(GPIOA, GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT,
+                  GPIO9);
+
+	/* LED0 */
+	/* Set GPIO1 (in GPIO port A) to 'output push-pull'. */
 	/* LED1 */
-	/* Set GPIO8 (in GPIO port A) to 'output push-pull'. */
+	/* Set GPIO0 (in GPIO port A) to 'output push-pull'. */
 	gpio_set_mode(GPIOA, GPIO_MODE_OUTPUT_50_MHZ,
-			GPIO_CNF_OUTPUT_PUSHPULL, GPIO8);
+			GPIO_CNF_OUTPUT_PUSHPULL, GPIO1);
+	gpio_set_mode(GPIOA, GPIO_MODE_OUTPUT_50_MHZ,
+			GPIO_CNF_OUTPUT_PUSHPULL, GPIO0);
 
-	/* JTAG_TRST */
-	/* Set GPIO4 (in GPIO port B) to 'output push-pull'. */
+	/* LED2 */
+	/* Set GPIO0 (in GPIO port A) to 'output push-pull'. */
 	gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_50_MHZ,
-			GPIO_CNF_OUTPUT_PUSHPULL, GPIO4);
-
-	AFIO_MAPR |= AFIO_MAPR_SWJ_CFG_FULL_SWJ_NO_JNTRST;
-
-	/* LED2, ADC4, ADC6 */
-	/* Set GPIO15, GPIO5, GPIO2 (in GPIO port C) to 'output push-pull'. */
-	gpio_set_mode(GPIOC, GPIO_MODE_OUTPUT_50_MHZ,
-			GPIO_CNF_OUTPUT_PUSHPULL, GPIO15 | GPIO5 | GPIO2);
+			GPIO_CNF_OUTPUT_PUSHPULL, GPIO2);
 
 	/* Preconfigure the LEDs. */
-	gpio_set(GPIOA, GPIO8);
-	gpio_set(GPIOB, GPIO4);
-	gpio_set(GPIOC, GPIO15 | GPIO5 | GPIO2);
+	gpio_set(GPIOA, GPIO1);
+	gpio_set(GPIOA, GPIO0);
+	gpio_set(GPIOB, GPIO2);
+
 }
 
 void led_set(int id, int on)
@@ -312,37 +333,25 @@ void led_set(int id, int on)
 	if (on) {
 		switch (id) {
 			case 0:
-				gpio_clear(GPIOA, GPIO8); /* LED1 On */
+				gpio_clear(GPIOA, GPIO1); /* LED1 On */
 				break;
 			case 1:
-				gpio_clear(GPIOB, GPIO4); /* JTAG_TRST On */
+				gpio_clear(GPIOA, GPIO0); /* JTAG_TRST On */
 				break;
 			case 2:
-				gpio_clear(GPIOC, GPIO2); /* ADC6 On */
-				break;
-			case 3:
-				gpio_clear(GPIOC, GPIO5); /* ADC4 On */
-				break;
-			case 4:
-				gpio_clear(GPIOC, GPIO15); /* LED2 On */
+				gpio_clear(GPIOB, GPIO2); /* ADC6 On */
 				break;
 		}
 	} else {
 		switch (id) {
 			case 0:
-				gpio_set(GPIOA, GPIO8); /* LED1 On */
+				gpio_set(GPIOA, GPIO1); /* LED1 On */
 				break;
 			case 1:
-				gpio_set(GPIOB, GPIO4); /* JTAG_TRST On */
+				gpio_set(GPIOA, GPIO0); /* JTAG_TRST On */
 				break;
 			case 2:
-				gpio_set(GPIOC, GPIO2); /* ADC6 On */
-				break;
-			case 3:
-				gpio_set(GPIOC, GPIO5); /* ADC4 On */
-				break;
-			case 4:
-				gpio_set(GPIOC, GPIO15); /* LED2 On */
+				gpio_set(GPIOB, GPIO2); /* ADC6 On */
 				break;
 		}
 	}
@@ -352,27 +361,26 @@ static inline void led_advance(void)
 {
 	static int state = 0;
 
-	if (state < 5) {
+	if (state < 3) {
 		led_set(state, 1);
-	} else if (state < 10) {
-		led_set(state - 5, 0);
+	} else if (state < 6) {
+		led_set(state - 3, 0);
+	} else if (state < 12) {
+		led_set(11 - state, 1);
 	} else if (state < 15) {
-		led_set(14 - state, 1);
-	} else if (state < 20) {
-		led_set(19 - state, 0);
+		led_set(14 - state, 0);
 	}
 
 	state++;
-	if(state == 20) state = 0;
+	if(state == 15) state = 0;
 
 }
 
 bool gpio_force_bootloader()
 {
 	/* Force the bootloader if the GPIO state was changed to indicate this
-	      in the application (state remains after a core-only reset)
-	   Skip bootloader if the "skip bootloader" pin is grounded
-	   Force bootloader if the USB vbus is powered
+	   in the application (state remains after a core-only reset)
+	   Force bootloader if the boot/bind button is pressed
 	   Skip bootloader otherwise */
 
 	/* Check if we are being forced by the payload. */
@@ -381,45 +389,22 @@ bool gpio_force_bootloader()
 	    ((GPIO_IDR(GPIOC) & 0x1) == 0x0)){
 		return true;
 	} else {
-		/* Enable clock for the "skip bootloader" pin bank and check
-		 * for it
-		 */
-		rcc_peripheral_enable_clock(&RCC_APB2ENR, RCC_APB2ENR_IOPCEN);
-		gpio_set_mode(GPIOC, GPIO_MODE_INPUT,
-			      GPIO_CNF_INPUT_PULL_UPDOWN, GPIO0);
-		gpio_set(GPIOC, GPIO0);
-
-		if(!gpio_get(GPIOC, GPIO0)) {
-			/* If pin grounded, disable the pin bank and return */
-			gpio_set_mode(GPIOC, GPIO_MODE_INPUT,
-				      GPIO_CNF_INPUT_FLOAT, GPIO0);
-			rcc_peripheral_disable_clock(&RCC_APB2ENR,
-						     RCC_APB2ENR_IOPCEN);
-			return false;
-		}
-		/* Disable the pin bank */
-		gpio_set_mode(GPIOC, GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT,
-			      GPIO0);
-		rcc_peripheral_disable_clock(&RCC_APB2ENR, RCC_APB2ENR_IOPCEN);
-
-		/* Enable clock for the "USB vbus" pin bank and check for it */
-		rcc_peripheral_enable_clock(&RCC_APB2ENR, RCC_APB2ENR_IOPAEN);
+		/* Enable clock for the boot/bind button and check for it */
+		rcc_periph_clock_enable(RCC_GPIOA);
 		gpio_set_mode(GPIOA, GPIO_MODE_INPUT,
-			      GPIO_CNF_INPUT_PULL_UPDOWN, GPIO9);
-		gpio_clear(GPIOA, GPIO9);
+		              GPIO_CNF_INPUT_FLOAT, GPIO8);
 
-		if(gpio_get(GPIOA, GPIO9)) {
-			/* If vbus pin high, disable the pin bank and return */
+		if(!gpio_get(GPIOA, GPIO8)) {
+			/* If pin grounded, disable the pin bank and return */
 			gpio_set_mode(GPIOA, GPIO_MODE_INPUT,
-				      GPIO_CNF_INPUT_FLOAT, GPIO9);
-			rcc_peripheral_disable_clock(&RCC_APB2ENR,
-						     RCC_APB2ENR_IOPAEN);
+			              GPIO_CNF_INPUT_FLOAT, GPIO8);
+			rcc_periph_clock_disable(RCC_GPIOA);
 			return true;
 		}
 		/* Disable the pin bank */
-		gpio_set_mode(GPIOA, GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT,
-			      GPIO9);
-		rcc_peripheral_disable_clock(&RCC_APB2ENR, RCC_APB2ENR_IOPAEN);
+		gpio_set_mode(GPIOA, GPIO_MODE_INPUT,
+		              GPIO_CNF_INPUT_FLOAT, GPIO8);
+		rcc_periph_clock_disable(RCC_GPIOA);
 	}
 
 	return false;
@@ -450,14 +435,14 @@ int main(void)
 			     * and want to jump the app
 			     */
 			    flash_program_option_bytes(FLASH_OBP_DATA0,
-						       0x00FF); 	
+				                           0x00FF);
 			    flash_lock();
 			}
 			/* Set vector table base address. */
 			SCB_VTOR = APP_ADDRESS & 0xFFFF;
 			/* Initialise master stack pointer. */
 			asm volatile("msr msp, %0"::"g"
-				     (*(volatile uint32_t *)APP_ADDRESS));
+			             (*(volatile uint32_t *)APP_ADDRESS));
 			/* Jump to application. */
 			(*(void (**)())(APP_ADDRESS + 4))();
 	    }
@@ -479,7 +464,7 @@ int main(void)
 	rcc_clock_setup_in_hse_12mhz_out_72mhz();
 #endif
 
-	rcc_peripheral_enable_clock(&RCC_AHBENR, RCC_AHBENR_OTGFSEN);
+	rcc_periph_clock_enable(RCC_USB);
 
 	gpio_init();
 
@@ -490,13 +475,18 @@ int main(void)
 
 	get_dev_unique_id(serial_no);
 
-	usbd_device *device = usbd_init(&stm32f107_usb_driver, &dev, &config,
-					usb_strings, 4, usbd_control_buffer,
-					sizeof(usbd_control_buffer));
-	usbd_register_control_callback( device,
-				USB_REQ_TYPE_CLASS | USB_REQ_TYPE_INTERFACE,
-				USB_REQ_TYPE_TYPE | USB_REQ_TYPE_RECIPIENT,
-				usbdfu_control_request);
+	usbd_device *device = usbd_init(&stm32f103_usb_driver, &dev, &config,
+	                                usb_strings, 4, usbd_control_buffer,
+	                                sizeof(usbd_control_buffer));
+	usbd_register_control_callback(device,
+	                               USB_REQ_TYPE_CLASS | USB_REQ_TYPE_INTERFACE,
+	                               USB_REQ_TYPE_TYPE | USB_REQ_TYPE_RECIPIENT,
+	                               usbdfu_control_request);
+
+	/* Pull up the USBD+ line */
+	gpio_set(GPIOA, GPIO9);
+	gpio_set_mode(GPIOA, GPIO_MODE_OUTPUT_10_MHZ,
+                  GPIO_CNF_OUTPUT_PUSHPULL, GPIO9);
 
 	while (1)
 		usbd_poll(device);
