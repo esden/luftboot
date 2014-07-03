@@ -53,7 +53,7 @@
 #endif
 
 #define APP_ADDRESS	0x08002000
-#define SECTOR_SIZE	2048
+#define SECTOR_SIZE	1024
 
 /* Commands sent with wBlockNum == 0 as per ST implementation. */
 #define CMD_SETADDR	0x21
@@ -338,9 +338,6 @@ void led_set(int id, int on)
 			case 1:
 				gpio_clear(GPIOA, GPIO0); /* JTAG_TRST On */
 				break;
-			case 2:
-				gpio_clear(GPIOB, GPIO2); /* ADC6 On */
-				break;
 		}
 	} else {
 		switch (id) {
@@ -350,9 +347,6 @@ void led_set(int id, int on)
 			case 1:
 				gpio_set(GPIOA, GPIO0); /* JTAG_TRST On */
 				break;
-			case 2:
-				gpio_set(GPIOB, GPIO2); /* ADC6 On */
-				break;
 		}
 	}
 }
@@ -361,18 +355,18 @@ static inline void led_advance(void)
 {
 	static int state = 0;
 
-	if (state < 3) {
+	if (state < 2) {
 		led_set(state, 1);
+	} else if (state < 4) {
+		led_set(state - 2, 0);
 	} else if (state < 6) {
-		led_set(state - 3, 0);
-	} else if (state < 12) {
-		led_set(11 - state, 1);
-	} else if (state < 15) {
-		led_set(14 - state, 0);
+		led_set(5 - state, 1);
+	} else if (state < 8) {
+		led_set(7 - state, 0);
 	}
 
 	state++;
-	if(state == 15) state = 0;
+	if(state == 8) state = 0;
 
 }
 
