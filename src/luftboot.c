@@ -2,7 +2,7 @@
  * This file is part of the Paparazzi UAV project.
  *
  * Copyright (C) 2010 Gareth McMullin <gareth@blacksphere.co.nz>
- * Copyright (C) 2011-2012 Piotr Esden-Tempski <piotr@esden.net>
+ * Copyright (C) 2011-2014 Piotr Esden-Tempski <piotr@esden.net>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,6 +28,16 @@
 #include <libopencm3/usb/usbd.h>
 #include <libopencm3/usb/dfu.h>
 
+#include "config.h"
+
+#ifndef COMPANY_NAME
+#define COMPANY_NAME    "Fake PPRZ company. ;)"
+#endif
+
+#ifndef DEVICE_NAME
+#define DEVICE_NAME     "Some F1 Device"
+#endif
+
 #ifndef VERSION
 #define VERSION         ""
 #endif
@@ -52,7 +62,7 @@
 
 #define FLASH_OBP_RDP_KEY 0x5aa5
 
-static const char 
+static const char
 dev_serial[] __attribute__((section (".devserial"))) = DEV_SERIAL;
 
 /* We need a special large control buffer for this device: */
@@ -131,11 +141,11 @@ const struct usb_config_descriptor config = {
 	.interface = ifaces,
 };
 
-static char serial_no[24+8];
+static char serial_no[8+24+1];
 
 static const char *usb_strings[] = {
-	"Transition Robotics Inc.",
-	"Lisa/M (Upgrade) " VERSION,
+	COMPANY_NAME,
+	DEVICE_NAME " (Upgrade) " VERSION,
 	serial_no,
 	/* This string is used by ST Microelectronics' DfuSe utility */
 	"@Internal Flash   /0x08000000/4*002Ka,124*002Kg"
